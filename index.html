@@ -12,7 +12,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; /* Prevent browser zooming/scrolling */
+            touch-action: none; /* Critical for mobile controls */
         }
         #canvas-container {
             width: 100%;
@@ -69,7 +69,6 @@
         #level-val { color: #ff00ff; text-shadow: 0 0 15px #ff00ff; }
         #coins-val { color: #ffd700; text-shadow: 0 0 15px #ffd700; }
         
-        /* Energy Bar */
         #energy-wrapper {
             position: absolute;
             bottom: 100px; 
@@ -166,13 +165,13 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(5, 0, 17, 0.85); /* Semi-transparent bg */
+            background: rgba(5, 0, 17, 0.85); 
             backdrop-filter: blur(5px);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            z-index: 100; /* Highest priority */
+            z-index: 100;
             pointer-events: auto;
         }
         #start-screen h1 {
@@ -247,7 +246,6 @@
         #magnet-text { color: #ff00aa; border: 1px solid #ff00aa; }
         #shield-text { color: #00aaff; border: 1px solid #00aaff; }
 
-        /* Mobile Controls */
         #fire-btn {
             position: absolute;
             bottom: 30px;
@@ -269,14 +267,13 @@
             transition: transform 0.1s;
             z-index: 30;
             user-select: none;
-            display: none; /* Hidden initially */
+            display: none;
         }
         #fire-btn:active {
             background: rgba(255, 0, 85, 0.8);
             color: white;
             transform: scale(0.95);
         }
-
     </style>
 </head>
 <body>
@@ -323,8 +320,8 @@
         </div>
         
         <div class="instructions" id="instructions-text">
-            Desktop: Arrows to Move/Jump | Shift to Shoot<br>
-            Mobile: Swipe to Move & Jump | Tap Fire Button
+            Mobile: Slide to Move | Swipe Up to Jump<br>
+            Tap Red Button to Fire
         </div>
 
         <div id="fire-btn">FIRE</div>
@@ -384,7 +381,7 @@
         let warpLines = [];
         
         // State
-        let gameStarted = false; // New State
+        let gameStarted = false;
         let isGameOver = false;
         let score = 0;
         let coins = 0;
@@ -422,7 +419,6 @@
         const btnRestart = document.getElementById('restart-btn');
         const btnFire = document.getElementById('fire-btn');
         
-        // Powerup UI
         const elSlowMo = document.getElementById('slow-mo-text');
         const elMagnet = document.getElementById('magnet-text');
         const elShield = document.getElementById('shield-text');
@@ -482,8 +478,9 @@
             window.addEventListener('keydown', handleInput);
             btnRestart.addEventListener('click', resetGame);
             
-            // Input - Touch
+            // Input - Touch (Updated for sliding)
             document.addEventListener('touchstart', handleTouchStart, {passive: false});
+            document.addEventListener('touchmove', handleTouchMove, {passive: false});
             document.addEventListener('touchend', handleTouchEnd, {passive: false});
             
             // Fire Button
@@ -501,7 +498,6 @@
                 createProjectile();
             });
 
-            // Spacebar restart
             window.addEventListener('keydown', (e) => {
                 if(isGameOver && e.code === 'Space') resetGame();
             });
@@ -520,40 +516,52 @@
             touchStartY = e.changedTouches[0].clientY;
         }
 
+        function handleTouchMove(e) {
+            if(e.target.id === 'fire-btn' || e.target.id === 'restart-btn' || e.target.id === 'start-btn') return;
+            if (isGameOver || !gameStarted) return;
+            e.preventDefault(); // Prevent scrolling
+
+            const touchX = e.changedTouches[0].clientX;
+            const touchY = e.changedTouches[0].clientY;
+
+            const dx = touchX - touchStartX;
+
+            // Horizontal Slide Logic
+            // We use a threshold to trigger a lane change, then reset anchor
+            if (Math.abs(dx) > 40) { 
+                if (dx > 0) {
+                    // Right
+                    if (playerLane < 1) {
+                        playerLane++;
+                        tiltPlayer(-1);
+                        touchStartX = touchX; // Reset anchor to current position
+                        touchStartY = touchY; // Reset Y anchor too to prevent jump triggers
+                    }
+                } else {
+                    // Left
+                    if (playerLane > -1) {
+                        playerLane--;
+                        tiltPlayer(1);
+                        touchStartX = touchX;
+                        touchStartY = touchY;
+                    }
+                }
+            }
+        }
+
         function handleTouchEnd(e) {
             if(e.target.id === 'fire-btn' || e.target.id === 'restart-btn' || e.target.id === 'start-btn') return;
             if (isGameOver || !gameStarted) return;
 
-            const touchEndX = e.changedTouches[0].clientX;
             const touchEndY = e.changedTouches[0].clientY;
-
-            const dx = touchEndX - touchStartX;
             const dy = touchEndY - touchStartY;
 
-            // Minimum swipe distance
-            const swipeThreshold = 30;
-
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal Movement
-                if (Math.abs(dx) > swipeThreshold) {
-                    if (dx > 0) {
-                        // Swipe Right
-                        if (playerLane < 1) playerLane++;
-                        tiltPlayer(-1);
-                    } else {
-                        // Swipe Left
-                        if (playerLane > -1) playerLane--;
-                        tiltPlayer(1);
-                    }
-                }
-            } else {
-                // Vertical Movement
-                if (Math.abs(dy) > swipeThreshold) {
-                    if (dy < 0) {
-                        // Swipe Up (Negative Y is up on screen)
-                        if (!isJumping) jump();
-                    }
-                }
+            // Swipe Up Detection (Jump)
+            // We check vertical displacement. 
+            // Note: touchStartY might have been reset by handleTouchMove, so this detects
+            // a flick up relative to the last slide action.
+            if (dy < -40) { 
+                 if (!isJumping) jump();
             }
         }
 
